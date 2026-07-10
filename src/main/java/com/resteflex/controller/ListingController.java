@@ -1,6 +1,6 @@
 package com.resteflex.controller;
 
-import com.resteflex.entity.Listing;
+import com.resteflex.model.Listing;
 import com.resteflex.service.ListingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,13 +19,13 @@ public class ListingController {
     private final ListingService listingService;
 
     @GetMapping
-    @Operation(summary = "Récupérer tous les logements")
+    @Operation(summary = "Tous les logements")
     public ResponseEntity<List<Listing>> getAllListings() {
         return ResponseEntity.ok(listingService.getAllListings());
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Récupérer un logement par ID")
+    @Operation(summary = "Un logement par ID")
     public ResponseEntity<Listing> getListingById(@PathVariable String id) {
         return ResponseEntity.ok(listingService.getListingById(id));
     }
@@ -39,8 +39,7 @@ public class ListingController {
     @GetMapping("/search/price")
     @Operation(summary = "Rechercher par prix")
     public ResponseEntity<List<Listing>> searchByPrice(
-            @RequestParam Double min,
-            @RequestParam Double max) {
+            @RequestParam Double min, @RequestParam Double max) {
         return ResponseEntity.ok(listingService.searchByPriceRange(min, max));
     }
 

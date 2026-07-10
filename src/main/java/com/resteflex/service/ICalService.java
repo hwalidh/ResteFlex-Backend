@@ -1,6 +1,7 @@
 package com.resteflex.service;
 
-import com.resteflex.entity.Booking;
+import com.resteflex.model.Booking;
+import com.resteflex.model.Listing;
 import lombok.extern.slf4j.Slf4j;
 import net.fortuna.ical4j.data.CalendarOutputter;
 import net.fortuna.ical4j.model.Calendar;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
 
@@ -23,47 +25,49 @@ public class ICalService {
     private static final String CALENDAR_DIR = "calendars";
     private static final String CALENDAR_FILE = CALENDAR_DIR + "/bookings.ics";
 
-    public void addBookingToCalendar(Booking booking) {
+    public void addBookingToCalendar(Booking booking, Listing listing) {
         try {
             ensureDirectoryExists();
             Calendar calendar = buildCalendar();
 
-            Date start = Date.from(booking.getCheckIn().atStartOfDay(ZoneId.systemDefault()).toInstant());
-            Date end = Date.from(booking.getCheckOut().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            Date start = Date.from(LocalDate.parse(booking.getCheckIn())
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant());
+            Date end = Date.from(LocalDate.parse(booking.getCheckOut())
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant());
 
             VEvent event = new VEvent(new DateTime(start), new DateTime(end),
-                    "Réservation: " + booking.getListing().getTitle());
+                    "Réservation: " + listing.getTitle());
 
             event.getProperties().add(new Uid(new RandomUidGenerator().generateUid().getValue()));
             event.getProperties().add(new Description(
-                    "Email: " + booking.getEmail() +
+                    "Booking ID: " + booking.getId() +
+                    "\nEmail: " + booking.getEmail() +
                     "\nHôtes: " + booking.getGuests() +
                     "\nTotal: " + booking.getTotalPrice() + "€"));
-            event.getProperties().add(new Location(booking.getListing().getLocation()));
+            event.getProperties().add(new Location(listing.getLocation()));
 
             calendar.getComponents().add(event);
             saveCalendar(calendar);
             log.info("Booking {} added to iCal", booking.getId());
         } catch (Exception e) {
-            log.error("Error adding booking to iCal: {}", e.getMessage());
+            log.error("Error adding to iCal: {}", e.getMessage());
         }
     }
 
-    public void removeBookingFromCalendar(Booking booking) {
+    public void removeBookingFromCalendar(String bookingId) {
         try {
             ensureDirectoryExists();
             Calendar calendar = buildCalendar();
-            String emailToRemove = booking.getEmail();
             calendar.getComponents().removeIf(component -> {
                 if (!(component instanceof VEvent)) return false;
                 VEvent event = (VEvent) component;
                 Description desc = (Description) event.getProperties().getProperty("DESCRIPTION");
-                return desc != null && desc.getValue().contains(emailToRemove);
+                return desc != null && desc.getValue().contains("Booking ID: " + bookingId);
             });
             saveCalendar(calendar);
-            log.info("Booking {} removed from iCal", booking.getId());
+            log.info("Booking {} removed from iCal", bookingId);
         } catch (Exception e) {
-            log.error("Error removing booking from iCal: {}", e.getMessage());
+            log.error("Error removing from iCal: {}", e.getMessage());
         }
     }
 

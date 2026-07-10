@@ -1,7 +1,6 @@
 package com.resteflex.dto;
 
 import lombok.*;
-import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -11,7 +10,7 @@ import java.time.LocalDate;
 public class BookingRequest {
     private String listingId;
     private String email;
-    private LocalDate checkIn;
-    private LocalDate checkOut;
+    private String checkIn;   // format: "2024-12-15"
+    private String checkOut;  // format: "2024-12-20"
     private Integer guests;
 }

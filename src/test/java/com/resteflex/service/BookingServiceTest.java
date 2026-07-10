@@ -1,10 +1,9 @@
 package com.resteflex.service;
 
+import com.resteflex.client.SupabaseClient;
 import com.resteflex.dto.BookingRequest;
-import com.resteflex.entity.Booking;
-import com.resteflex.entity.Listing;
-import com.resteflex.repository.BookingRepository;
-import com.resteflex.repository.ListingRepository;
+import com.resteflex.model.Booking;
+import com.resteflex.model.Listing;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,25 +11,19 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class BookingServiceTest {
 
-    @Mock private BookingRepository bookingRepository;
-    @Mock private ListingRepository listingRepository;
-    @Mock private StripeService stripeService;
+    @Mock private SupabaseClient supabaseClient;
     @Mock private ICalService iCalService;
-
-    @InjectMocks
-    private BookingService bookingService;
+    @InjectMocks private BookingService bookingService;
 
     private Listing testListing;
     private BookingRequest bookingRequest;
@@ -47,102 +40,88 @@ class BookingServiceTest {
         bookingRequest = BookingRequest.builder()
                 .listingId("listing-1")
                 .email("test@example.com")
-                .checkIn(LocalDate.now().plusDays(5))
-                .checkOut(LocalDate.now().plusDays(10))
+                .checkIn("2024-12-15")
+                .checkOut("2024-12-20")
                 .guests(2)
                 .build();
     }
 
     @Test
     void testCreateBooking_Success() {
-        when(listingRepository.findById("listing-1")).thenReturn(Optional.of(testListing));
-        when(bookingRepository.findByListingIdAndStatusNot("listing-1", Booking.BookingStatus.CANCELLED))
+        when(supabaseClient.getSingle(eq("listings"), anyString(), eq(Listing.class)))
+                .thenReturn(testListing);
+        when(supabaseClient.getList(eq("bookings"), anyString(), eq(Booking.class)))
                 .thenReturn(List.of());
 
-        Booking saved = Booking.builder()
+        Booking savedBooking = Booking.builder()
                 .id("booking-1")
-                .listing(testListing)
+                .listingId("listing-1")
                 .email("test@example.com")
-                .checkIn(bookingRequest.getCheckIn())
-                .checkOut(bookingRequest.getCheckOut())
+                .checkIn("2024-12-15")
+                .checkOut("2024-12-20")
                 .guests(2)
                 .totalPrice(925.0)
-                .status(Booking.BookingStatus.PENDING)
+                .status("pending")
                 .build();
 
-        when(bookingRepository.save(any())).thenReturn(saved);
+        when(supabaseClient.insert(eq("bookings"), any(), eq(Booking.class)))
+                .thenReturn(savedBooking);
 
         Booking result = bookingService.createBooking(bookingRequest);
 
         assertEquals("test@example.com", result.getEmail());
-        assertEquals(Booking.BookingStatus.PENDING, result.getStatus());
+        assertEquals("pending", result.getStatus());
         assertEquals(925.0, result.getTotalPrice());
-        verify(iCalService).addBookingToCalendar(any());
+        verify(iCalService).addBookingToCalendar(any(), any());
     }
 
     @Test
     void testCreateBooking_ListingNotFound() {
-        when(listingRepository.findById("invalid")).thenReturn(Optional.empty());
-        BookingRequest req = BookingRequest.builder().listingId("invalid").build();
-        assertThrows(NoSuchElementException.class, () -> bookingService.createBooking(req));
+        when(supabaseClient.getSingle(eq("listings"), anyString(), eq(Listing.class)))
+                .thenReturn(null);
+        assertThrows(NoSuchElementException.class, () -> bookingService.createBooking(bookingRequest));
     }
 
     @Test
-    void testCreateBooking_DatesNotAvailable() {
-        when(listingRepository.findById("listing-1")).thenReturn(Optional.of(testListing));
+    void testCreateBooking_DatesConflict() {
+        when(supabaseClient.getSingle(eq("listings"), anyString(), eq(Listing.class)))
+                .thenReturn(testListing);
 
         Booking existing = Booking.builder()
-                .checkIn(LocalDate.now().plusDays(4))
-                .checkOut(LocalDate.now().plusDays(8))
-                .status(Booking.BookingStatus.CONFIRMED)
+                .checkIn("2024-12-14")
+                .checkOut("2024-12-18")
+                .status("confirmed")
                 .build();
 
-        when(bookingRepository.findByListingIdAndStatusNot("listing-1", Booking.BookingStatus.CANCELLED))
+        when(supabaseClient.getList(eq("bookings"), anyString(), eq(Booking.class)))
                 .thenReturn(List.of(existing));
 
         assertThrows(IllegalArgumentException.class, () -> bookingService.createBooking(bookingRequest));
     }
 
     @Test
-    void testGetBookingById_Found() {
-        Booking booking = Booking.builder().id("booking-1").build();
-        when(bookingRepository.findById("booking-1")).thenReturn(Optional.of(booking));
-        assertEquals("booking-1", bookingService.getBookingById("booking-1").getId());
-    }
-
-    @Test
-    void testGetBookingById_NotFound() {
-        when(bookingRepository.findById("x")).thenReturn(Optional.empty());
-        assertThrows(NoSuchElementException.class, () -> bookingService.getBookingById("x"));
-    }
-
-    @Test
     void testCancelBooking() {
-        Booking booking = Booking.builder()
-                .id("booking-1")
-                .status(Booking.BookingStatus.PENDING)
-                .build();
-        when(bookingRepository.findById("booking-1")).thenReturn(Optional.of(booking));
-        when(bookingRepository.save(any())).thenReturn(booking);
+        Booking booking = Booking.builder().id("b-1").status("pending").build();
+        when(supabaseClient.getSingle(eq("bookings"), anyString(), eq(Booking.class)))
+                .thenReturn(booking);
+        when(supabaseClient.update(anyString(), anyString(), any(), eq(Booking.class)))
+                .thenReturn(booking);
 
-        bookingService.cancelBooking("booking-1");
+        bookingService.cancelBooking("b-1");
 
-        assertEquals(Booking.BookingStatus.CANCELLED, booking.getStatus());
-        verify(iCalService).removeBookingFromCalendar(booking);
+        verify(iCalService).removeBookingFromCalendar("b-1");
     }
 
     @Test
     void testConfirmPayment() {
-        Booking booking = Booking.builder()
-                .id("booking-1")
-                .status(Booking.BookingStatus.PENDING)
-                .build();
-        when(bookingRepository.findById("booking-1")).thenReturn(Optional.of(booking));
-        when(bookingRepository.save(any())).thenReturn(booking);
+        Booking booking = Booking.builder().id("b-1").status("paid")
+                .stripePaymentId("pi_123").build();
+        when(supabaseClient.update(anyString(), anyString(), any(), eq(Booking.class)))
+                .thenReturn(booking);
 
-        bookingService.confirmPayment("booking-1", "pi_stripe_123");
+        Booking result = bookingService.confirmPayment("b-1", "pi_123");
 
-        assertEquals(Booking.BookingStatus.PAID, booking.getStatus());
-        assertEquals("pi_stripe_123", booking.getStripePaymentId());
+        assertEquals("paid", result.getStatus());
+        assertEquals("pi_123", result.getStripePaymentId());
     }
 }

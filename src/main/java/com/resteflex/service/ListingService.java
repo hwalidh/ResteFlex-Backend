@@ -1,7 +1,7 @@
 package com.resteflex.service;
 
-import com.resteflex.entity.Listing;
-import com.resteflex.repository.ListingRepository;
+import com.resteflex.client.SupabaseClient;
+import com.resteflex.model.Listing;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -11,49 +11,39 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class ListingService {
 
-    private final ListingRepository listingRepository;
+    private final SupabaseClient supabaseClient;
 
     public List<Listing> getAllListings() {
-        return listingRepository.findAll();
+        return supabaseClient.getList("listings", "select=*&order=created_at.asc", Listing.class);
     }
 
     public Listing getListingById(String id) {
-        return listingRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Listing not found: " + id));
+        Listing listing = supabaseClient.getSingle("listings", "id=eq." + id + "&select=*", Listing.class);
+        if (listing == null) throw new NoSuchElementException("Listing not found: " + id);
+        return listing;
     }
 
     public List<Listing> searchByLocation(String location) {
-        return listingRepository.findByLocationContainingIgnoreCase(location);
+        return supabaseClient.getList("listings", "location=ilike.*" + location + "*&select=*", Listing.class);
     }
 
-    public List<Listing> searchByPriceRange(Double minPrice, Double maxPrice) {
-        return listingRepository.findByPriceBetween(minPrice, maxPrice);
+    public List<Listing> searchByPriceRange(Double min, Double max) {
+        return supabaseClient.getList("listings", "price=gte." + min + "&price=lte." + max + "&select=*", Listing.class);
     }
 
     public List<Listing> searchByGuests(Integer guests) {
-        return listingRepository.findByGuestsGreaterThanEqual(guests);
+        return supabaseClient.getList("listings", "guests=gte." + guests + "&select=*", Listing.class);
     }
 
     public Listing createListing(Listing listing) {
-        return listingRepository.save(listing);
+        return supabaseClient.insert("listings", listing, Listing.class);
     }
 
-    public Listing updateListing(String id, Listing update) {
-        Listing existing = getListingById(id);
-        if (update.getTitle() != null)       existing.setTitle(update.getTitle());
-        if (update.getDescription() != null) existing.setDescription(update.getDescription());
-        if (update.getPrice() != null)       existing.setPrice(update.getPrice());
-        if (update.getLocation() != null)    existing.setLocation(update.getLocation());
-        if (update.getBedrooms() != null)    existing.setBedrooms(update.getBedrooms());
-        if (update.getBathrooms() != null)   existing.setBathrooms(update.getBathrooms());
-        if (update.getGuests() != null)      existing.setGuests(update.getGuests());
-        if (update.getImageUrl() != null)    existing.setImageUrl(update.getImageUrl());
-        if (update.getImages() != null)      existing.setImages(update.getImages());
-        if (update.getAmenities() != null)   existing.setAmenities(update.getAmenities());
-        return listingRepository.save(existing);
+    public Listing updateListing(String id, Listing listing) {
+        return supabaseClient.update("listings", "id=eq." + id, listing, Listing.class);
     }
 
     public void deleteListing(String id) {
-        listingRepository.deleteById(id);
+        supabaseClient.delete("listings", "id=eq." + id);
     }
 }

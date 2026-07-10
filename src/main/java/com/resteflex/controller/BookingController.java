@@ -1,7 +1,7 @@
 package com.resteflex.controller;
 
 import com.resteflex.dto.BookingRequest;
-import com.resteflex.dto.BookingResponse;
+import com.resteflex.model.Booking;
 import com.resteflex.service.BookingService;
 import com.resteflex.service.StripeService;
 import com.stripe.exception.StripeException;
@@ -26,53 +26,47 @@ public class BookingController {
 
     @PostMapping
     @Operation(summary = "Créer une réservation")
-    public ResponseEntity<BookingResponse> createBooking(@RequestBody BookingRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(BookingResponse.fromEntity(bookingService.createBooking(request)));
+    public ResponseEntity<Booking> createBooking(@RequestBody BookingRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(bookingService.createBooking(request));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Récupérer une réservation")
-    public ResponseEntity<BookingResponse> getBooking(@PathVariable String id) {
-        return ResponseEntity.ok(BookingResponse.fromEntity(bookingService.getBookingById(id)));
+    public ResponseEntity<Booking> getBooking(@PathVariable String id) {
+        return ResponseEntity.ok(bookingService.getBookingById(id));
     }
 
     @GetMapping("/email/{email}")
     @Operation(summary = "Réservations par email")
-    public ResponseEntity<List<BookingResponse>> getBookingsByEmail(@PathVariable String email) {
-        return ResponseEntity.ok(
-                bookingService.getBookingsByEmail(email).stream()
-                        .map(BookingResponse::fromEntity).toList());
+    public ResponseEntity<List<Booking>> getBookingsByEmail(@PathVariable String email) {
+        return ResponseEntity.ok(bookingService.getBookingsByEmail(email));
     }
 
     @GetMapping("/listing/{listingId}")
     @Operation(summary = "Réservations par logement")
-    public ResponseEntity<List<BookingResponse>> getBookingsByListing(@PathVariable String listingId) {
-        return ResponseEntity.ok(
-                bookingService.getBookingsByListing(listingId).stream()
-                        .map(BookingResponse::fromEntity).toList());
+    public ResponseEntity<List<Booking>> getBookingsByListing(@PathVariable String listingId) {
+        return ResponseEntity.ok(bookingService.getBookingsByListing(listingId));
     }
 
     @PostMapping("/{id}/checkout")
-    @Operation(summary = "Créer session Stripe Checkout")
+    @Operation(summary = "Créer session Stripe")
     public ResponseEntity<Map<String, String>> createCheckoutSession(
             @PathVariable String id,
             @RequestBody Map<String, String> payload) throws StripeException {
-        var booking = bookingService.getBookingById(id);
-        Session session = stripeService.createCheckoutSession(id, booking.getTotalPrice(), payload.get("email"));
+        Booking booking = bookingService.getBookingById(id);
+        Session session = stripeService.createCheckoutSession(
+                id, booking.getTotalPrice(), payload.get("email"));
         return ResponseEntity.ok(Map.of(
                 "sessionId", session.getId(),
                 "url", session.getUrl()));
     }
 
     @PostMapping("/{id}/confirm")
-    @Operation(summary = "Confirmer le paiement Stripe")
-    public ResponseEntity<BookingResponse> confirmPayment(
+    @Operation(summary = "Confirmer le paiement")
+    public ResponseEntity<Booking> confirmPayment(
             @PathVariable String id,
             @RequestBody Map<String, String> payload) {
-        return ResponseEntity.ok(
-                BookingResponse.fromEntity(
-                        bookingService.confirmPayment(id, payload.get("stripePaymentId"))));
+        return ResponseEntity.ok(bookingService.confirmPayment(id, payload.get("stripePaymentId")));
     }
 
     @DeleteMapping("/{id}")
